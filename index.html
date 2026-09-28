@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chatify · Launcher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:#eaf5ed;
+    font-family:'Roboto',system-ui,-apple-system,sans-serif;
+    color:#1d3b2a;
+    display:flex;align-items:center;justify-content:center;
+    min-height:100vh;padding:32px;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .wrap{text-align:center;max-width:520px;width:100%}
+  .logo{
+    width:56px;height:56px;object-fit:contain;
+    border-radius:16px;background:#f0faf3;padding:5px;
+    margin:0 auto 24px;display:block;
+    box-shadow:0 2px 10px rgba(50,168,82,.10);
+  }
+  .spinner{
+    width:34px;height:34px;
+    border:3.5px solid #d4e8dd;border-top-color:#32a852;
+    border-radius:50%;margin:0 auto 22px;
+    animation:spin .9s cubic-bezier(.4,0,.2,1) infinite;
+  }
+  .spinner.hide{display:none}
+  @keyframes spin{100%{transform:rotate(360deg)}}
+  .msg{font-size:19px;font-weight:500;letter-spacing:-.1px;line-height:1.45}
+  .hint{font-size:14.5px;color:#3d5a4a;margin-top:10px;display:none;line-height:1.5}
+  .hint.show{display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <img class="logo"
+       src="https://res.cloudinary.com/dceqg5cky/image/upload/SDG_log-removebg-preview_bslq5d.png"
+       alt="">
+  <div class="spinner" id="spinner"></div>
+  <p class="msg" id="msg">Opening verification page…</p>
+  <p class="hint" id="hint"></p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     Your repo file, served through jsDelivr (CORS-enabled).
+     Format: https://cdn.jsdelivr.net/gh/USER/REPO@BRANCH/FILE
+     ========================================================= */
+  var GITHUB_CDN = 'https://cdn.jsdelivr.net/gh/plane65k/chatify-code@main/index.html';
+
+  var LAUNCHER_URL = window.location.origin + window.location.pathname;
+
+  var msgEl     = document.getElementById('msg');
+  var hintEl    = document.getElementById('hint');
+  var spinnerEl = document.getElementById('spinner');
+
+  /* =========================================================
+     1. If this page is the OAuth popup coming back from Google,
+        relay the tokens to the opener (the about:blank tab) and
+        close ourselves.
+     ========================================================= */
+  var hash   = window.location.hash   || '';
+  var search = window.location.search || '';
+  var hasTokens =
+    hash.indexOf('access_token')       !== -1 ||
+    hash.indexOf('error_description')  !== -1 ||
+    search.indexOf('code=')            !== -1 ||
+    search.indexOf('error=')           !== -1;
+
+  if (hasTokens && window.opener) {
+    relayToOpener(hash, search);
+    return;
+  }
+
+  /* =========================================================
+     2. Normal load: fetch the app and inject it into about:blank
+     ========================================================= */
+  boot();
+
+  async function boot() {
+    try {
+      var res = await fetch(GITHUB_CDN, { cache: 'no-store' });
+      if (!res.ok) throw new Error('Fetch failed: HTTP ' + res.status);
+      var html = await res.text();
+
+      /* Patch the OAuth redirect placeholder with this launcher's URL. */
+      html = html.split('__LAUNCHER_URL__').join(LAUNCHER_URL);
+
+      var win = window.open('about:blank', '_blank');
+      if (!win) {
+        spinnerEl.classList.add('hide');
+        msgEl.textContent  = 'Popup blocked.';
+        hintEl.textContent = 'Please allow pop-ups for this site, then reload.';
+        hintEl.classList.add('show');
+        return;
+      }
+
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      try { win.focus(); } catch (e) {}
+
+      spinnerEl.classList.add('hide');
+      msgEl.textContent  = 'Verification page opened.';
+      hintEl.textContent = 'You can close this tab.';
+      hintEl.classList.add('show');
+    } catch (err) {
+      spinnerEl.classList.add('hide');
+      msgEl.textContent  = 'Could not load the verification page.';
+      hintEl.textContent = err.message;
+      hintEl.classList.add('show');
+    }
+  }
+
+  /* =========================================================
+     3. OAuth relay helpers (only used when this page IS the popup)
+     ========================================================= */
+  function relayToOpener(hashStr, searchStr) {
+    var h = parsePairs(hashStr);
+    var q = parsePairs(searchStr);
+
+    var payload = {
+      type:          'chatify-oauth',
+      access_token:  h.access_token  || null,
+      refresh_token: h.refresh_token || null,
+      expires_in:    h.expires_in    || null,
+      token_type:    h.token_type    || null,
+      code:          q.code          || null,
+      error:         h.error_description || h.error ||
+                     q.error_description || q.error || null
+    };
+
+    spinnerEl.classList.add('hide');
+    msgEl.textContent = payload.error
+      ? 'Sign-in failed. You can close this window.'
+      : 'Sign-in complete. You can close this window.';
+    hintEl.textContent = '';
+
+    var target = null;
+    try { target = window.opener; } catch (e) {}
+
+    function send() {
+      if (!target) return;
+      try { target.postMessage(payload, '*'); } catch (e) {}
+    }
+    send();
+    setTimeout(send, 120);
+    setTimeout(send, 500);
+
+    try { window.history.replaceState(null, '', window.location.pathname); } catch (e) {}
+    setTimeout(function () { try { window.close(); } catch (e) {} }, 700);
+  }
+
+  function parsePairs(str) {
+    var out = {};
+    if (!str) return out;
+    str = str.replace(/^[#?]/, '');
+    str.split('&').forEach(function (pair) {
+      if (!pair) return;
+      var i = pair.indexOf('=');
+      var k, v;
+      if (i === -1) { k = pair; v = ''; }
+      else { k = pair.slice(0, i); v = pair.slice(i + 1); }
+      try { out[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, ' ')); }
+      catch (e) { out[k] = v; }
+    });
+    return out;
+  }
+})();
+</script>
+</body>
+</html>
