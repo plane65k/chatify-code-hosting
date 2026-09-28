@@ -18,13 +18,27 @@
     min-height:100vh;padding:32px;
     -webkit-tap-highlight-color:transparent;
   }
-  .wrap{text-align:center;max-width:520px;width:100%}
+  .wrap{text-align:center;max-width:560px;width:100%}
+
+  /* Logo: 1.5× bigger (56 → 84). No animation. Clickable only when armed. */
   .logo{
-    width:56px;height:56px;object-fit:contain;
-    border-radius:16px;background:#f0faf3;padding:5px;
-    margin:0 auto 24px;display:block;
-    box-shadow:0 2px 10px rgba(50,168,82,.10);
+    width:84px;height:84px;object-fit:contain;
+    border-radius:22px;background:#f0faf3;padding:7px;
+    margin:0 auto 28px;display:block;
+    box-shadow:0 3px 14px rgba(50,168,82,.12);
+    transition:transform .15s ease, box-shadow .15s ease;
   }
+  body.armed .logo{
+    cursor:pointer;
+    box-shadow:0 6px 22px rgba(50,168,82,.28);
+  }
+  body.armed .logo:hover{
+    transform:scale(1.04);
+  }
+  body.armed .logo:active{
+    transform:scale(.97);
+  }
+
   .spinner{
     width:34px;height:34px;
     border:3.5px solid #d4e8dd;border-top-color:#32a852;
@@ -33,16 +47,17 @@
   }
   .spinner.hide{display:none}
   @keyframes spin{100%{transform:rotate(360deg)}}
-  .msg{font-size:19px;font-weight:500;letter-spacing:-.1px;line-height:1.45}
-  .hint{font-size:14.5px;color:#3d5a4a;margin-top:10px;display:none;line-height:1.5}
+
+  .msg{font-size:26px;font-weight:500;letter-spacing:-.2px;line-height:1.4}
+  .hint{font-size:18px;color:#3d5a4a;margin-top:14px;display:none;line-height:1.55}
   .hint.show{display:block}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <img class="logo"
+  <img class="logo" id="logo"
        src="https://res.cloudinary.com/dceqg5cky/image/upload/SDG_log-removebg-preview_bslq5d.png"
-       alt="">
+       alt="Chatify">
   <div class="spinner" id="spinner"></div>
   <p class="msg" id="msg">Opening verification page…</p>
   <p class="hint" id="hint"></p>
@@ -63,6 +78,7 @@
   var msgEl     = document.getElementById('msg');
   var hintEl    = document.getElementById('hint');
   var spinnerEl = document.getElementById('spinner');
+  var logoEl    = document.getElementById('logo');
 
   /* =========================================================
      1. If this page is the OAuth popup coming back from Google,
@@ -87,7 +103,25 @@
      ========================================================= */
   boot();
 
+  /* Logo becomes the retry trigger whenever the auto-launch fails. */
+  logoEl.addEventListener('click', function () {
+    if (document.body.classList.contains('armed')) boot();
+  });
+
+  function armLogo() {
+    document.body.classList.add('armed');
+  }
+  function disarmLogo() {
+    document.body.classList.remove('armed');
+  }
+
   async function boot() {
+    disarmLogo();
+    spinnerEl.classList.remove('hide');
+    msgEl.textContent  = 'Opening verification page…';
+    hintEl.textContent = '';
+    hintEl.classList.remove('show');
+
     try {
       var res = await fetch(GITHUB_CDN, { cache: 'no-store' });
       if (!res.ok) throw new Error('Fetch failed: HTTP ' + res.status);
@@ -100,8 +134,9 @@
       if (!win) {
         spinnerEl.classList.add('hide');
         msgEl.textContent  = 'Popup blocked.';
-        hintEl.textContent = 'Please allow pop-ups for this site, then reload.';
+        hintEl.textContent = 'Tap the Chatify logo to open the verification page.';
         hintEl.classList.add('show');
+        armLogo();
         return;
       }
 
@@ -117,8 +152,9 @@
     } catch (err) {
       spinnerEl.classList.add('hide');
       msgEl.textContent  = 'Could not load the verification page.';
-      hintEl.textContent = err.message;
+      hintEl.textContent = 'Tap the Chatify logo to retry. (' + err.message + ')';
       hintEl.classList.add('show');
+      armLogo();
     }
   }
 
